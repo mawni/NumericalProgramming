@@ -1,0 +1,428 @@
+/***************************************************************************
+ *
+ *   File        : tasks.c
+ *   Student Id  : 763078
+ *   Name        : Mustafa Awni
+ *
+ ***************************************************************************/
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include <sys/time.h>
+#include <string.h>
+#include "tasks.h"
+#include <assert.h>
+
+/* programming is fun */
+/* welcome to my submission!! Thanks for reading */
+
+/* apologies in advance for abundance of comments. programming is fun but confusing */
+
+/* to compile and test at home:
+	gcc -Wall -std=c99 *.c -o exec -lm
+	./exec in_shock.csv in_linalsys.csv in_interp.csv 4 in_waveeqn.csv
+	
+for submission:
+login to dimefox with 
+	ssh mawni@dimefox.eng.unimelb.edu.au
+go to ass 2 directoy:
+	cd ENGR30003/A2
+check files w/: 
+	ls
+remove current tasks.c file when you're in the "cd ENGR30003/A2" directory:
+	rm tasks.c
+logout of dimefox:
+	logout
+copy new tasks.c file over to dimefox:
+	scp tasks.c mawni@dimefox.eng.unimelb.edu.au:~/ENGR30003/A2
+then proceed with submission as instructed in Ass2 pdf
+	gcc -Wall -std=c99 *.c -o exec -lm
+	valgrind ./exec in_shock.csv in_linalsys.csv in_interp.csv 4 in_waveeqn.csv
+then submit
+	submit ENGR30003 A2 *.c *.h *.pdf
+	verify ENGR30003 A2 > feedback.txt
+	nano feedback.txt
+		note you have to press ctrl+X to close the txt
+*/
+
+/* Constants */
+#define PI 3.14159265358979323846
+#define THETA_MAX_M5 45
+	//M=5.0, from Q2.3a this was approximated to be less than 45, so I choose 45 as the max 
+	//	(I know in reality it will be lower)
+#define THETA_ZERO_BETA_U 90
+	//found in Q2.1
+#define ACCURACY_EPSILON 0.0000001
+    	//epsilon for accuracy. I've chosen this num because outputs are to 6dp
+
+/* Q2 shockwave struct */
+typedef struct {
+	double M;	//mach number
+	double theta; //angle in degrees (not radians)
+		//I STORED AS DOUBLE, BUT REMEMBER IT MUST BE OUTPUTTED AS INTEGER
+	double beta_l;
+	double beta_u;
+		//lower and upper beta. degrees (not radians)
+	double gamma; //ratio of specific heats
+} shockwave_t;
+
+/* taken from ENGR3K3>L2>filo_io.c */
+FILE* safe_fopen(const char* path, const char* mode)
+{
+    FILE* fp = fopen(path, mode);
+    if (fp == NULL) {
+        perror("file open error.");
+        exit(EXIT_FAILURE);
+    }
+    return fp;
+}
+
+/* taken from workshops */
+/*
+void* safe_malloc(size_t bytes)
+{
+    void* ptr = malloc(bytes);
+    if (ptr == NULL) {
+        printf("error mallocing %lu bytes\n", bytes);
+        exit(EXIT_FAILURE);
+    }
+    return ptr;
+}*/
+
+/* Newton raphson eqns Q2.3 */
+/* Remember that c uses radians */
+double f_shockwave(double M, double theta, double beta, double gamma) {
+	return (2*(cos(beta)/sin(beta))*(pow(M,2)*pow(sin(beta),2)-1)/(pow(M,2)*(gamma+cos(2*beta))+2)-tan(theta));
+}
+
+double fprime_shockwave(double M, double beta, double gamma) {
+	//derivative of f_shockwave. I calculated by hand
+	return ((-2*pow(1/sin(beta),2)*(pow(M,2)*pow(sin(beta),2)-1)+pow(M,2)*sin(2*beta)*2*(cos(beta)/sin(beta)))*(pow(M,2)*(gamma+cos(2*beta))+2)+2*pow(M,2)*sin(2*beta)*2*(cos(beta)/sin(beta))*(pow(M,2)*pow(sin(beta),2)-1))/(pow((pow(M,2)*(gamma+cos(2*beta))+2),2));
+}
+
+double newtonraph(double beta_i, double M, double theta, double gamma) {
+	return beta_i-f_shockwave(M, theta, beta_i, gamma)/fprime_shockwave(M, beta_i, gamma);
+}
+
+
+void shockwave(const char* q2_file)
+{
+    //printf("shockwave() - IMPLEMENT ME!\n");
+    
+    /* MY LOGIC FOR SOLUTION */
+    /* ~~~~~~~~~~~~~~~~~~~~~ */
+    // 0. define struct has M, theta, beta_l, beta_u, gamma
+    //		### not necessary but i'll make it anyway
+    //			I'll write beta_l and beta_u to file as they are calculated 
+    // 1. open in_shock.csv file, 
+    //		1.1. read first 5 lines and do nothing
+    //		1.2. read until read failure for how many M values there are. count the number of lines
+    // 2. close file. reset to line 1
+    // 3. malloc 1D array of M values to be analysed
+    // 4. reopen in_shock.csv file
+    //		4.1. take in data from first few lines then input all M values into 1D array
+    // 5. close file
+    // 6. Q2.3a do newton raphson method for M=5, theta=20
+    //		6.1. ####WHAT TO DO ABOUT INITIAL GUESSES??####
+    //		6.2. print final beta_l and beta_u values. check with ass2 pdf
+    // 7. malloc array of structs
+    //		7.1. i'll need to define a struct that contains theta, beta_l, beta_u
+    // 8. Q2.3b do newton raphson method for M=5, 0<=theta<=theta_max
+    //		8.1. loop through theta = 0 until theta = theta_max(??) or until theta = 90 deg
+    //			8.1.1. do newton raphson for theta = 0 using gormula from Q2.1 in Ass2
+    // 9. maybe print these numbers to a .csv but i don't want that csv to be submitted
+    //		print it and then take the values into excel and make the graph. put into excel
+    // 10. free malloc array of structs for (7)
+    // 11. create out_shock.csv for outputting part data
+    //		11.1. print initial default line 1 "M,theta,beta_lower,beta_upper\n"
+    // 12. Q2.3c do newton-raphson loop over all M values in array of Ms (3)
+    //		12.1. for each M, run through theta = 0 until theta = theta_max and calculate beta_l and beta_u
+    //			12.1.1. fprintf to csv ("%f,%d,%f,%f\n",M,theta,beta_l,beta_u) 
+    // 13. close out_shock.csv
+    // free malloc array for M (3)
+    
+    
+    //### Open in_shock.csv file, 
+    FILE *f;
+	f = safe_fopen(q2_file,"r");
+    
+	
+    //### read first 5 lines and do nothing
+    	//there's a lot of debug code commented out. Had issues reading file but got it eventally
+    fscanf(f,"M,theta,beta_l,beta_u,gamma\n");
+    fscanf(f,"%*f,%*f,%*f,%*f,%*f\n");
+    /*  
+	double temp;
+    fscanf(f,"%lf,",&temp);
+    printf("%f\n",temp);
+    fscanf(f,"%lf,",&temp);
+    printf("%f\n",temp);
+    fscanf(f,"%lf,",&temp);
+    printf("%f\n",temp);
+    fscanf(f,"%lf,",&temp);
+    printf("%f\n",temp);
+    fscanf(f,"%lf",&temp);
+    printf("%f\n",temp);
+    */
+    //double temp;
+    //char temp_c;
+    	//debug stuff
+    fscanf(f,"M\n");
+    //if (fscanf(f,"%c",&temp_c)!=1){printf("success at line 145\ntemp_c = [%c]\n",temp_c);};
+    	//1 data item is matched and stored stored, so returned value will be 1
+    	//fscanf(f,"M"); wasn't working for me. It would never successfully read the M, so I did %c instead
+    //if (fscanf(f,"5.0")!=0){printf("error at line 148\n");};
+    //fscanf(f,"M");
+    fscanf(f,"%*f\n");
+    fscanf(f,"M");
+    //fscanf(f,"%lf\n",&temp);
+    //printf("temp = %f\n", temp);
+    /* %*f skips the variable */
+    
+    //### read until read failure for how many M values there are. count the number of lines
+    int M_val_ctr = 0;
+    while (fscanf(f,"\n%*f") == 0){
+    	M_val_ctr += 1;
+    }
+    //printf("For Q2.3c, there are %d M values to analyse\n", M_val_ctr);
+    	//should come out as 6. SUCCESS!
+    
+    //### close file
+    fclose(f);	
+    
+    //### malloc 1D array of M values to be analysed
+	double* M_vals;
+	M_vals = (double*) malloc((M_val_ctr)*sizeof(double));
+		// c stores array from M_vals[0] until M_vals[M_val_ctr-1]
+	assert(M_vals != NULL);
+    
+    //### Re-open file
+	f = safe_fopen(q2_file,"r");
+	if (fseek(f, 0, SEEK_SET)) {
+		//reset file so I can read again from beginning
+		perror("file reset error");
+    	exit(EXIT_FAILURE); 
+	}
+    
+	//### Defining values for Q2.3a, Q2.3b
+	double M_a, M_b;
+	double theta_a; //degrees
+	double beta_l_a, beta_u_a;
+		//lower and upper beta. degrees (not radians). these are initial guesses
+	double gamma; //ratio of specific heats
+	
+    //### take in data from first few lines then input all M values into 1D array
+    fscanf(f,"M,theta,beta_l,beta_u,gamma\n");
+    fscanf(f,"%lf,%lf,%lf,%lf,%lf\n", &M_a, &theta_a, &beta_l_a, &beta_u_a, &gamma);
+    fscanf(f,"M\n");
+    fscanf(f,"%lf\n", &M_b);
+    fscanf(f,"M");
+    for (int i = 0; i < M_val_ctr; i++){
+    	// loop through until expected M_val_ctr M values are read
+    	fscanf(f,"\n%lf", &M_vals[i]);
+    		//store M number into the array
+    	//printf("M number #%d = %lf\n", i+1, M_vals[i]);
+    }
+    
+    //### close file
+    fclose(f);
+    
+    beta_l_a = beta_l_a*(PI/180);
+    beta_u_a = beta_u_a*(PI/180);
+    theta_a = theta_a*(PI/180);
+    	//180 degrees not really a magic number in my opinion. Pretty obvious
+    	//convert to radians	
+    
+    //double function_test = f_shockwave(5.0, 0.0, PI/2, 1.4);
+    //printf("For M = 5, theta = 0, beta_u = 90 deg, gamma = 1.4 --> f(beta) = %f\n", function_test);
+    	//checking my function is correct. And it is. 
+    //double derivative_test = fprime_shockwave(5.0, PI/2, 1.4);
+    //printf("For M = 5, beta_u = pi/2 radians, gamma = 1.4 --> f'(beta) = %f\n", derivative_test);
+    	//checking my derivative is typed up correct. And it is.
+    	//https://www.wolframalpha.com/input/?i=derivative+of+%282*%28cos%28x%29%2Fsin%28x%29%29*%285%5E2*sin%28x%29%5E2-1%29%2F%285%5E2*%281.4%2Bcos%282*x%29%29%2B2%29-tan%280%29%29+where+x+%3D+pi%2F2+radians
+	
+    //### Q2.3a do newton raphson method for M=5, theta=20
+    int maxiter = 100;
+    	//i'll stop iterating when 100 loops of newtonraph() have been calculated
+    //printf("Q2.3a. For M = %f, theta = %f rads, gamma = %f\n", M_a, theta_a, gamma);
+    //printf("Iteration 0, beta_l = %f, f(beta_l) = %f \n", beta_l_a, f_shockwave(M_a, theta_a, beta_l_a, gamma));
+    for (int i=1; i<(maxiter+1); i++){
+    	beta_l_a = newtonraph(beta_l_a, M_a, theta_a, gamma);
+    		//iterate newtonraph beta value
+    	//printf("Iteration %d, beta_l = %f, f(beta_l) = %f \n", i, beta_l_a, f_shockwave(M_a, theta_a, beta_l_a, gamma));
+    	if (fabs(f_shockwave(M_a, theta_a, beta_l_a, gamma)) < ACCURACY_EPSILON){
+    		//we've found an accurate enough rot
+    		i = maxiter+1;
+    	}
+    }
+    
+    //printf("--\nIteration 0, beta_u = %f, f(beta_l) = %f \n", beta_u_a, f_shockwave(M_a, theta_a, beta_u_a, gamma));
+    for (int i=1; i<(maxiter+1); i++){
+    	beta_u_a = newtonraph(beta_u_a, M_a, theta_a, gamma);
+    	//printf("Iteration %d, beta_u = %f, f(beta_u) = %f \n", i, beta_u_a, f_shockwave(M_a, theta_a, beta_u_a, gamma));
+    	if (fabs(f_shockwave(M_a, theta_a, beta_u_a, gamma)) < ACCURACY_EPSILON){
+    		i = maxiter+1;
+    	}
+    }
+    
+    
+
+    //######## Q2.3b do newton raphson method for M=5, 0<=theta<=theta_max
+    /* it's been commented out because it generates a csv file for my own analysis. 
+    //To just comment out that file printing section would be a pain ._.
+    
+    
+    //int theta_b;
+    	//will be analysed from 0<=theta<=theta_max 
+    double beta_l_b, beta_u_b;
+    	//beta values for part (b)
+    beta_l_b = asin(1/M_b);
+		//Eqn from Q2.1 for when theta = 0. Stored in radians. It will be my initial guess for theta = 1 deg
+	beta_u_b = THETA_ZERO_BETA_U*(PI/180);
+		//from Q2.1 for when theta = 0
+	
+	FILE* fp = safe_fopen("q2_3b.csv", "w");
+		// 'q2_3b.csv' doesnt exist yet, so we create it with write mode 'w'
+	    //### maybe print these numbers to a .csv but i don't want that csv to be submitted. 
+	    //I'll make the csv once and use it to make the graph for Q2.3b
+    if (fprintf(fp, "theta,beta_l,beta_u\n") < 0){
+		perror("file write error");
+        exit(EXIT_FAILURE);  
+	}
+    fprintf(fp, "0.0,%f,%f\n", beta_l_b*(180/PI), beta_u_b*(180/PI));
+    	//print the data for when theta = 0. we already know the solutions
+	
+    int beta_u_solve_chk = 0; //0 if unsolved, 1 if solved
+    int beta_l_solve_chk = 0;
+    for (int theta_b=1; theta_b<(THETA_MAX_M5+1); theta_b++){
+    	beta_u_solve_chk = 0;
+    	beta_l_solve_chk = 0;
+    	for (int i=1; i<(maxiter+1); i++){
+    		if (beta_u_solve_chk==0){
+    			beta_u_b = newtonraph(beta_u_b, M_b, theta_b*(PI/180), gamma);
+    				//previous solution for beta is the initial guess for the next one
+    				//done because of the trends seen in Q2.2a and Fig 2 in A2 pdf
+    				if(fabs(f_shockwave(M_b, theta_b*(PI/180), beta_u_b, gamma)) < ACCURACY_EPSILON){
+    					//if root found accurately, stop iterating
+    					beta_u_solve_chk = 1;
+    				};
+    		};
+    		if (beta_l_solve_chk==0){
+    			beta_l_b = newtonraph(beta_l_b, M_b, theta_b*(PI/180), gamma);
+    			if(fabs(f_shockwave(M_b, theta_b*(PI/180), beta_l_b, gamma)) < ACCURACY_EPSILON){
+    					beta_l_solve_chk = 1;
+    			};
+    		};
+    		
+    		if (beta_l_solve_chk == 1 && beta_u_solve_chk == 1){
+    			i = maxiter+1;
+    			fprintf(fp, "%d,%f,%f\n", theta_b, beta_l_b*(180/PI), beta_u_b*(180/PI));
+    			//### print it and then take the values into excel and make the graph. put into excel
+    		};
+    	};
+    };
+    	
+    //following section not necessary/
+    // 7. malloc array of structs
+    //		7.1. i'll need to define a struct that contains theta, beta_l, beta_u
+    //		8.1. loop through theta = 0 until theta = theta_max(??) or until theta = 90 deg?
+    //free malloc array of structs for (7)
+    
+    fclose(fp);
+    
+    */
+
+    
+    //############## Q2.3c
+    
+    //### create out_shock.csv for outputting part data
+	FILE* fp_c = safe_fopen("out_shock.csv", "w");
+		// 'out_shock.csv' doesnt exist yet, so we create it with write mode 'w'
+	
+	//### print initial default line 1 "M,theta,beta_lower,beta_upper\n"
+    if (fprintf(fp_c, "M,theta,beta_lower,beta_upper\n") < 0){
+		perror("file write error");
+        exit(EXIT_FAILURE);  
+	};
+	
+	double beta_l_c, beta_u_c;
+    	//beta values for part (b)
+    int beta_u_solve_chk; //0 if unsolved, 1 if solved
+	int beta_l_solve_chk;
+	
+    //### for each M, run through theta = 0 until theta = 90 and calculate beta_l and beta_u
+    // 	my algorithm works such that if no solutions exist for a theta, nothing is outputted
+    // 	this means that by just picking theta = 90, I'm playing it quite safe
+    //	thinking intuitively, it makes no sense for theta_max to even be close to 90, so it should be fine
+	for (int k=0; k < M_val_ctr; k++){
+		beta_l_c = asin(1/M_vals[k]);
+			//Eqn from Q2.1 for when theta = 0. Stored in radians. 
+			//It's my answer for when theta=0, and my initial guess for theta = 1 deg
+		beta_u_c = THETA_ZERO_BETA_U*(PI/180);
+			//theta_zero_beta_u = 90
+			//from Q2.1 for when theta = 0
+		fprintf(fp_c, "%f,0,%f,%f\n", M_vals[k], beta_l_c*(180/PI), beta_u_c*(180/PI));
+    		//print the data for when theta = 0 deg. we already know the solutions
+    		
+		beta_u_solve_chk = 0; //0 if unsolved, 1 if solved
+		beta_l_solve_chk = 0;
+		
+		for (int theta_c=1; theta_c<(THETA_ZERO_BETA_U+1); theta_c++){
+			//to make it as dynamic as possible, I've set the algorithm to run until theta = 90
+			//this is always the maximum, so it's a safe move. explained in another comment around line 351
+			beta_u_solve_chk = 0;
+			beta_l_solve_chk = 0;
+			for (int i=1; i<(maxiter+1); i++){
+				if (beta_u_solve_chk==0){
+					beta_u_c = newtonraph(beta_u_c, M_vals[k], theta_c*(PI/180), gamma);
+					//previous solution for beta is the initial guess for the next one
+					//done because of the trends seen in Q2.2a and Fig 2 in A2 pdf
+					if(fabs(f_shockwave(M_vals[k], theta_c*(PI/180), beta_u_c, gamma)) < ACCURACY_EPSILON){
+						//if root found accurately, stop iterating
+						beta_u_solve_chk = 1;
+					};
+				};
+				if (beta_l_solve_chk==0){
+					beta_l_c = newtonraph(beta_l_c, M_vals[k], theta_c*(PI/180), gamma);
+					if(fabs(f_shockwave(M_vals[k], theta_c*(PI/180), beta_l_c, gamma)) < ACCURACY_EPSILON){
+						beta_l_solve_chk = 1;
+					};
+				};
+				
+				if (beta_l_solve_chk == 1 && beta_u_solve_chk == 1){
+					//fprintf to csv required data
+					fprintf(fp_c, "%f,%d,%f,%f\n", M_vals[k], theta_c, beta_l_c*(180/PI), beta_u_c*(180/PI));
+					//printf("M=%f,theta=%d,beta_l=%f,beta_u=%f\n",M_vals[k], theta_c, beta_l_c*(180/PI), beta_u_c*(180/PI));
+					i = maxiter+1;
+				};
+			};
+			//printf("theta = %d, beta_l soln found? = %d, beta_u soln found? = %d\n", theta_c, beta_l_solve_chk, beta_u_solve_chk);
+			if(beta_l_solve_chk == 0 || beta_u_solve_chk == 0){
+				//if by whatever incremented theta_c value, if no soln found, means we've reached theta_max
+				//stop finding solutions and end loop of incrementing theta_c
+				theta_c = THETA_ZERO_BETA_U+1;
+				//printf("no solutions found. theta = %d\n", theta_c);
+			};
+		};
+    };
+    
+    fclose(fp_c);
+    free(M_vals);
+    
+}
+
+void linalgbsys(const char* q4_file)
+{
+    printf("linalgbsys() - IMPLEMENT ME!\n");
+    
+}
+
+void interp(const char* q5_file, const double xo)
+{
+    printf("interp() - IMPLEMENT ME!\n");
+}
+
+void waveeqn(const char* q6_file)
+{
+    printf("heateqn() - IMPLEMENT ME!\n");
+}
